@@ -3,10 +3,20 @@
 import { useState } from 'react';
 import { Document } from '@langchain/core/documents';
 
+interface LanceDBDocument {
+  text: string;
+  vector: number[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+}
+
 export default function TestPage() {
   const [result, setResult] = useState<Document[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dbDocuments, setDbDocuments] = useState<LanceDBDocument[]>([]);
+  const [dbCount, setDbCount] = useState<number>(0);
+  const [dbLoading, setDbLoading] = useState(false);
 
   const handleFileUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -33,6 +43,47 @@ export default function TestPage() {
       setError(error instanceof Error ? error.message : 'Upload failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadDbDocuments = async () => {
+    setDbLoading(true);
+    try {
+      const response = await fetch('/api/list-documents');
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
+      setDbDocuments(data.documents || []);
+      setDbCount(data.count || 0);
+    } catch (err) {
+      console.error('Error loading documents:', err);
+      alert('Failed to load documents from LanceDB');
+    } finally {
+      setDbLoading(false);
+    }
+  };
+
+  const clearDatabase = async () => {
+    if (!confirm('Are you sure you want to delete all documents from LanceDB?')) {
+      return;
+    }
+    
+    try {
+      const response = await fetch('/api/list-documents', {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        alert(data.message);
+        await loadDbDocuments();
+      }
+    } catch (err) {
+      console.error('Error clearing database:', err);
+      alert('Failed to clear database');
     }
   };
 
@@ -117,10 +168,138 @@ export default function TestPage() {
                   )}
                 </div>
               ))}
+              <br />
+              <div className="space-y-2">
+                <button 
+                  onClick={async () => {
+                    try {
+                      const response = await fetch('/api/embed', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          texts: result.map((doc) => doc.pageContent)
+                        }),
+                      });
+                      const data = await response.json();
+                      console.log('Embeddings:', data.embeddings);
+                      alert(`Successfully embedded ${data.embeddings.length} documents`);
+                    } catch (err) {
+                      console.error('Error embedding documents:', err);
+                      alert('Failed to embed documents');
+                    }
+                  }}
+                  className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 mr-2"
+                >
+                  Embed Documents
+                </button>
+                <button 
+                  onClick={async () => {
+                    try {
+                      const response = await fetch('/api/add-documents', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          documents: result.map((doc) => ({
+                            pageContent: doc.pageContent,
+                            metadata: doc.metadata,
+                          }))
+                        }),
+                      });
+                      const data = await response.json();
+                      if (data.success) {
+                        alert(`Successfully added ${data.count} documents to LanceDB`);
+                        // Refresh the database view
+                        await loadDbDocuments();
+                      } else {
+                        throw new Error(data.error);
+                      }
+                    } catch (err) {
+                      console.error('Error adding documents:', err);
+                      alert('Failed to add documents to LanceDB');
+                    }
+                  }}
+                  className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+                >
+                  Add to LanceDB
+                </button>
+              </div>
             </div>
           </details>
         </div>
       )}
+
+      {/* LanceDB Visualization Section */}
+      <div className="mt-8 border-t pt-8">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold">LanceDB Contents</h2>
+          <div className="space-x-2">
+            <button 
+              onClick={loadDbDocuments}
+              disabled={dbLoading}
+              className="bg-indigo-500 text-white px-4 py-2 rounded hover:bg-indigo-600 disabled:opacity-50"
+            >
+              {dbLoading ? 'Loading...' : 'Load Documents'}
+            </button>
+            <button 
+              onClick={clearDatabase}
+              className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+            >
+              Clear Database
+            </button>
+          </div>
+        </div>
+
+        {dbCount > 0 ? (
+          <div className="bg-indigo-50 border border-indigo-200 rounded p-6">
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold mb-2">Database Stats</h3>
+              <p><strong>Total Documents:</strong> {dbCount}</p>
+              <p><strong>Loaded Documents:</strong> {dbDocuments.length}</p>
+            </div>
+
+            <details className="bg-white border rounded" open>
+              <summary className="p-4 cursor-pointer font-medium">
+                View All Documents ({dbDocuments.length})
+              </summary>
+              <div className="p-4 border-t max-h-96 overflow-y-auto">
+                {dbDocuments.length === 0 ? (
+                  <p className="text-gray-500">No documents loaded. Click &quot;Load Documents&quot; to fetch.</p>
+                ) : (
+                  dbDocuments.map((doc, index) => (
+                    <div key={index} className="mb-4 pb-4 border-b last:border-b-0">
+                      <div className="flex justify-between items-center mb-2">
+                        <h4 className="font-medium">Document {index + 1}</h4>
+                        <span className="text-sm text-gray-500">
+                          {doc.text?.length || 0} chars | Vector: {doc.vector?.length || 0}D
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded mb-2">
+                        {doc.text?.substring(0, 300) || 'No text content'}
+                        {(doc.text?.length || 0) > 300 && '...'}
+                      </p>
+                      <details className="mt-2">
+                        <summary className="text-xs text-gray-500 cursor-pointer">View Full Data</summary>
+                        <pre className="text-xs bg-gray-100 p-2 rounded mt-1 overflow-auto max-h-40">
+                          {JSON.stringify({
+                            ...doc,
+                            vector: doc.vector ? `[${doc.vector.length} dimensions]` : undefined
+                          }, null, 2)}
+                        </pre>
+                      </details>
+                    </div>
+                  ))
+                )}
+              </div>
+            </details>
+          </div>
+        ) : (
+          <div className="bg-gray-50 border border-gray-200 rounded p-6 text-center">
+            <p className="text-gray-600">
+              No documents in database. Upload a PDF and add it to LanceDB to see documents here.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
