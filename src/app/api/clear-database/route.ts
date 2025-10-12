@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { connect } from "@lancedb/lancedb";
 import { existsSync, rmSync } from "fs";
 
 export async function POST() {
