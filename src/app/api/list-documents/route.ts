@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function DELETE(_request: NextRequest) {
+export async function DELETE() {
   try {
     const db = await connect("data/lancedb");
     
