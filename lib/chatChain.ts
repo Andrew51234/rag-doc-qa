@@ -25,11 +25,13 @@ Context from uploaded documents:
 Question: {question}
 
 Instructions:
-- If this is a general question or greeting, respond naturally and helpfully
-- If this is about the documents and the context is relevant, provide a detailed answer based on the context
-- If this is about the documents but the context doesn't contain the answer, say you cannot find that specific information in the uploaded documents
+- If this is a general question or greeting, start your response with [GENERAL] then answer naturally
+- If you used the document context to answer, start your response with [DOCS] then provide your answer
+- If this is about the documents but the context doesn't contain the answer, start with [DOCS] and say you cannot find that information
 
-Helpful Answer:`;
+Format: [GENERAL] or [DOCS] followed by your answer.
+
+Answer:`;
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -93,14 +95,20 @@ export async function answerQuestion(
     new StringOutputParser(),
   ]);
 
-  const answer = await answerChain.invoke({
+  const rawAnswer = await answerChain.invoke({
     context,
     question: standaloneQuestion,
   });
 
+  const usedDocs = rawAnswer.startsWith("[DOCS]");
+  const cleanAnswer = rawAnswer
+    .replace(/^\[DOCS\]\s*/i, "")
+    .replace(/^\[GENERAL\]\s*/i, "")
+    .trim();
+
   return {
-    answer,
-    sourceDocuments: retrievedDocs,
+    answer: cleanAnswer,
+    sourceDocuments: usedDocs ? retrievedDocs : [],
   };
 }
 

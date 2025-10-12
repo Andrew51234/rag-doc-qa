@@ -34,14 +34,22 @@ export async function addDocuments(documents: Document[]) {
     const tableNames = await db.tableNames();
     if (tableNames.includes("rag-doc-qa")) {
       const table = await db.openTable("rag-doc-qa");
-      const existingDocs = await table.query()
-        .where(`fileName = '${fileName.replace(/'/g, "''")}'`)
-        .limit(1)
-        .toArray();
       
-      if (existingDocs.length > 0) {
-        console.log(`Document "${fileName}" already exists. Skipping duplicate upload.`);
-        throw new Error(`Document "${fileName}" has already been uploaded. Please clear the database first if you want to re-upload.`);
+      try {
+        const allDocs = await table.query().limit(1000).toArray();
+        const existingDoc = allDocs.find((doc: { fileName?: string }) => 
+          doc.fileName === fileName
+        );
+        
+        if (existingDoc) {
+          console.log(`Document "${fileName}" already exists. Skipping duplicate upload.`);
+          throw new Error(`Document "${fileName}" has already been uploaded. Please clear the database first if you want to re-upload.`);
+        }
+      } catch (queryError) {
+        if (queryError instanceof Error && queryError.message.includes("already been uploaded")) {
+          throw queryError;
+        }
+        console.warn("Could not check for duplicates, proceeding with upload:", queryError);
       }
     }
   }

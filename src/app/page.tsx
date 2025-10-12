@@ -4,10 +4,12 @@ import { useState, useRef, useEffect } from "react";
 import ChatMessage from "../components/ChatMessage";
 import ChatInput from "../components/ChatInput";
 import FileUpload from "../components/FileUpload";
+import Toast from "../components/Toast";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+  sources?: Array<{ content: string; metadata: Record<string, unknown> }>;
 }
 
 export default function Home() {
@@ -15,6 +17,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -40,28 +43,38 @@ export default function Home() {
 
       if (response.ok) {
         setUploadedFiles((prev) => [...prev, file.name]);
+        setToast({
+          message: `Successfully uploaded "${file.name}" (${data.chunks} chunks)`,
+          type: "success",
+        });
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            content: `✅ Successfully uploaded and processed "${file.name}". Created ${data.chunks} chunks. You can now ask questions about it!`,
+            content: `✅ Successfully uploaded and processed **"${file.name}"**. Created **${data.chunks} chunks**. You can now ask questions about it!`,
           },
         ]);
       } else {
+        setToast({
+          message: data.error || "Failed to upload file",
+          type: "error",
+        });
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            content: `❌ Failed to upload file: ${data.error}`,
+            content: `❌ **Upload Failed**: ${data.error}${data.details ? `\n\n_${data.details}_` : ""}`,
           },
         ]);
       }
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Unknown error";
+      setToast({ message: `Error: ${errorMsg}`, type: "error" });
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: `❌ Error uploading file: ${error instanceof Error ? error.message : "Unknown error"}`,
+          content: `❌ **Error uploading file**: ${errorMsg}`,
         },
       ]);
     } finally {
@@ -92,6 +105,7 @@ export default function Home() {
         const assistantMessage: Message = {
           role: "assistant",
           content: data.answer,
+          sources: data.sources || [],
         };
         setMessages((prev) => [...prev, assistantMessage]);
       } else {
@@ -131,17 +145,27 @@ export default function Home() {
       if (response.ok) {
         setMessages([]);
         setUploadedFiles([]);
-        alert(data.message);
+        setToast({ message: data.message, type: "success" });
       } else {
-        alert(`Error: ${data.error}`);
+        setToast({ message: data.error || "Failed to clear database", type: "error" });
       }
     } catch (error) {
-      alert(`Error clearing database: ${error instanceof Error ? error.message : "Unknown error"}`);
+      setToast({
+        message: `Error clearing database: ${error instanceof Error ? error.message : "Unknown error"}`,
+        type: "error",
+      });
     }
   };
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900">
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
       {/* Header */}
       <header className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-6 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
@@ -237,7 +261,12 @@ export default function Home() {
           ) : (
             <>
               {messages.map((msg, idx) => (
-                <ChatMessage key={idx} role={msg.role} content={msg.content} />
+                <ChatMessage 
+                  key={idx} 
+                  role={msg.role} 
+                  content={msg.content}
+                  sources={msg.sources}
+                />
               ))}
               {isLoading && (
                 <div className="flex justify-start mb-4">

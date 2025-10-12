@@ -12,11 +12,15 @@
     "@lancedb/lancedb": "^0.19.1",
     "@langchain/community": "^0.3.57",
     "@langchain/openai": "^0.6.14",
+    "@tailwindcss/typography": "^0.5.19",
     "langchain": "^0.3.35",
     "next": "15.5.4",
     "pdf-parse": "^1.1.1",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "react-markdown": "^10.1.0",
+    "rehype-raw": "^7.0.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
