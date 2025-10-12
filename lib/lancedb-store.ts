@@ -28,6 +28,24 @@ export async function addDocuments(documents: Document[]) {
   const db = await connect("data/lancedb");
   const embeddings = createEmbeddings();
   
+  const fileName = documents[0]?.metadata?.fileName;
+  
+  if (fileName) {
+    const tableNames = await db.tableNames();
+    if (tableNames.includes("rag-doc-qa")) {
+      const table = await db.openTable("rag-doc-qa");
+      const existingDocs = await table.query()
+        .where(`fileName = '${fileName.replace(/'/g, "''")}'`)
+        .limit(1)
+        .toArray();
+      
+      if (existingDocs.length > 0) {
+        console.log(`Document "${fileName}" already exists. Skipping duplicate upload.`);
+        throw new Error(`Document "${fileName}" has already been uploaded. Please clear the database first if you want to re-upload.`);
+      }
+    }
+  }
+  
   // Flatten metadata to simple types that LanceDB can handle
   const processedDocs = documents.map(doc => {
     const metadata = doc.metadata || {};
