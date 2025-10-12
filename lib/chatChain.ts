@@ -13,18 +13,22 @@ Chat History:
 Follow Up Question: {question}
 Standalone Question:`;
 
-const QA_TEMPLATE = `You are a helpful AI assistant with access to uploaded documents. 
+const QA_TEMPLATE = `You are a helpful AI assistant with access to uploaded documents.
 
 First, determine if the user's question is:
 1. A general question (greetings, general knowledge, casual conversation) - Answer naturally without requiring document context
 2. A document-specific question (asking about the uploaded documents) - Use the provided context to answer
 
+Chat History:
+{chatHistory}
+
 Context from uploaded documents:
 {context}
 
-Question: {question}
+Current Question: {question}
 
 Instructions:
+- Use the chat history to understand the conversation context
 - If this is a general question or greeting, start your response with [GENERAL] then answer naturally
 - If you used the document context to answer, start your response with [DOCS] then provide your answer
 - If this is about the documents but the context doesn't contain the answer, start with [DOCS] and say you cannot find that information
@@ -49,7 +53,8 @@ export async function createChatChain() {
 }
 
 function formatChatHistory(messages: ChatMessage[]): string {
-  return messages
+  const last10 = messages.slice(-10);
+  return last10
     .map((msg) => `${msg.role === "user" ? "Human" : "Assistant"}: ${msg.content}`)
     .join("\n");
 }
@@ -96,6 +101,7 @@ export async function answerQuestion(
   ]);
 
   const rawAnswer = await answerChain.invoke({
+    chatHistory: formatChatHistory(chatHistory),
     context,
     question: standaloneQuestion,
   });

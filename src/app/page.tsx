@@ -17,6 +17,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  const [docCount, setDocCount] = useState<number>(0);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -27,6 +28,24 @@ export default function Home() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    const checkExistingDocuments = async () => {
+      try {
+        const response = await fetch("/api/check-documents");
+        const data = await response.json();
+        
+        if (data.hasDocuments && data.fileNames.length > 0) {
+          setUploadedFiles(data.fileNames);
+          setDocCount(data.count || 0);
+        }
+      } catch (error) {
+        console.error("Failed to check existing documents:", error);
+      }
+    };
+
+    checkExistingDocuments();
+  }, []);
 
   const handleFileUpload = async (file: File) => {
     setIsUploading(true);
@@ -43,6 +62,7 @@ export default function Home() {
 
       if (response.ok) {
         setUploadedFiles((prev) => [...prev, file.name]);
+        setDocCount((prev) => prev + data.chunks);
         setToast({
           message: `Successfully uploaded "${file.name}" (${data.chunks} chunks)`,
           type: "success",
@@ -84,7 +104,8 @@ export default function Home() {
 
   const handleSendMessage = async (message: string) => {
     const userMessage: Message = { role: "user", content: message };
-    setMessages((prev) => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setIsLoading(true);
 
     try {
@@ -95,7 +116,10 @@ export default function Home() {
         },
         body: JSON.stringify({
           question: message,
-          chatHistory: messages,
+          chatHistory: updatedMessages.filter(m => m.role === "user" || m.role === "assistant").map(m => ({
+            role: m.role,
+            content: m.content
+          })),
         }),
       });
 
@@ -145,6 +169,7 @@ export default function Home() {
       if (response.ok) {
         setMessages([]);
         setUploadedFiles([]);
+        setDocCount(0);
         setToast({ message: data.message, type: "success" });
       } else {
         setToast({ message: data.error || "Failed to clear database", type: "error" });
@@ -166,6 +191,7 @@ export default function Home() {
           onClose={() => setToast(null)}
         />
       )}
+      
       {/* Header */}
       <header className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-6 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
@@ -216,11 +242,24 @@ export default function Home() {
       {/* Uploaded Files Banner */}
       {uploadedFiles.length > 0 && (
         <div className="bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800 px-6 py-2">
-          <div className="max-w-4xl mx-auto">
-            <p className="text-sm text-blue-800 dark:text-blue-200">
-              <span className="font-medium">Uploaded documents:</span>{" "}
-              {uploadedFiles.join(", ")}
-            </p>
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                <span className="font-medium">Uploaded documents:</span>{" "}
+                {uploadedFiles.join(", ")}
+              </p>
+              <div className="flex items-center gap-3 text-xs">
+                <span className="bg-blue-200 dark:bg-blue-800 text-blue-900 dark:text-blue-100 px-2 py-1 rounded font-medium">
+                  📦 {docCount} chunks in DB
+                </span>
+                {messages.length > 0 && (
+                  <span className="text-blue-700 dark:text-blue-300">
+                    💬 {messages.filter(m => m.role === "user").length} questions
+                    {messages.length > 10 && " • Memory: last 10"}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
